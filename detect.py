@@ -80,7 +80,10 @@ def run(
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
-):
+):  
+    cap = cv2.VideoCapture(0)
+    test = []
+    camera_running = True
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -206,15 +209,33 @@ def run(
 
         # Print time (inference-only)
         LOGGER.info(f"{s}{'' if len(det) else '(no detections), '}{dt[1].dt * 1E3:.1f}ms")
+        classes = list((det[:, 5].numpy()))
+        test.append(classes)
+        key = cv2.waitKey(1) & 0xFF  # 키 입력 대기
+        if key == ord('s'):  # 's' 키를 누르면 카메라 정지
+            test = []
+            for i in range(bs):
+                if vid_writer[i] is not None:
+                    vid_writer[i].release()
+            camera_running = False
+            cv2.destroyAllWindows()
+        elif key == ord('d'):  # 'd' 키를 누르면 카메라 다시 시작
+            for i in range(bs):
+                if vid_writer[i] is not None:
+                    vid_writer[i].release()
+            camera_running = True
+            break
 
     # Print results
     t = tuple(x.t / seen * 1E3 for x in dt)  # speeds per image
     LOGGER.info(f'Speed: %.1fms pre-process, %.1fms inference, %.1fms NMS per image at shape {(1, 3, *imgsz)}' % t)
+    # print('233줄',test)
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         LOGGER.info(f"Results saved to {colorstr('bold', save_dir)}{s}")
     if update:
         strip_optimizer(weights[0])  # update model (to fix SourceChangeWarning)
+    return test
 
 
 def parse_opt():
@@ -255,6 +276,7 @@ def parse_opt():
 def main(opt):
     check_requirements(ROOT / 'requirements.txt', exclude=('tensorboard', 'thop'))
     run(**vars(opt))
+
 
 
 if __name__ == '__main__':
